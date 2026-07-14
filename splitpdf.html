@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Split PDF - Heavy File Support</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+</head>
+<body class="bg-[#0f172a] text-white font-sans min-h-screen flex flex-col justify-between p-4">
+
+    <div class="w-full max-w-5xl mx-auto bg-[#1e293b] border border-dashed border-gray-600 rounded-lg p-8 text-center text-gray-400 font-semibold mb-6 text-lg shadow-inner">
+        [ ADVERTISEMENT - TOP (LARGE BOX) ]
+    </div>
+
+    <main class="w-full max-w-5xl mx-auto bg-[#1e293b] border border-gray-700 rounded-xl p-6 shadow-2xl flex-grow flex flex-col items-center">
+        <h1 class="text-3xl font-bold mb-2 text-center">Visual Split PDF</h1>
+        <p class="text-gray-400 text-center mb-6 text-sm sm:text-base">
+            PDF select karein, har page par sahi (✔) ya galat (✖) tick karein aur apna naya PDF generate karein.
+        </p>
+
+        <label class="cursor-pointer bg-[#1d4ed8] hover:bg-blue-700 transition px-6 py-3 rounded-lg font-medium flex items-center gap-2 mb-6 shadow-md">
+            📄 Select PDF File
+            <input type="file" id="pdf-input" accept="application/pdf" class="hidden">
+        </label>
+
+        <div id="pagination-controls" class="flex gap-4 items-center mb-6 hidden">
+            <button id="prev-btn" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-bold transition disabled:opacity-50">← Previous</button>
+            <span id="page-info" class="font-medium text-gray-300">Page 1 of 1</span>
+            <button id="next-btn" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-bold transition disabled:opacity-50">Next →</button>
+        </div>
+
+        <div id="pages-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full mb-8">
+            </div>
+
+        <div class="text-center w-full mt-auto">
+            <button id="download-btn" disabled class="bg-[#9a3412] hover:bg-orange-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-8 py-3 rounded-lg text-lg transition shadow-lgwb">
+                Split & Download →
+            </button>
+            <p id="error-message" class="text-red-400 mt-4 font-medium hidden">
+                Sahi PDF generate nahi ho paya. Kam se kam ek page select karein.
+            </p>
+        </div>
+    </main>
+
+    <div class="w-full max-w-5xl mx-auto bg-[#1e293b] border border-dashed border-gray-600 rounded-lg p-8 text-center text-gray-400 font-semibold mt-6 text-lg shadow-inner">
+        [ ADVERTISEMENT - BOTTOM (LARGE BOX) ]
+    </div>
+
+    <script>
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        const pdfInput = document.getElementById('pdf-input');
+        const pagesContainer = document.getElementById('pages-container');
+        const downloadBtn = document.getElementById('download-btn');
+        const errorMessage = document.getElementById('error-message');
+        
+        const paginationControls = document.getElementById('pagination-controls');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const pageInfo = document.getElementById('page-info');
+
+        let selectedPagesStatus = []; 
+        let currentPdfBytes = null;
+        let pdfDocInstance = null; // PDF.js instance
+        
+        let currentPageIndex = 0; // Current view page index for pagination
+        const itemsPerPage = 9;   // Ek baar me sirf 9 pages dikhenge screen par
+        let totalPages = 0;
+
+        pdfInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            errorMessage.classList.add('hidden');
+            pagesContainer.innerHTML = '<p class="text-center col-span-full text-gray-400 animate-pulse">PDF processing chal rahi hai aur previews load ho rahe hain...</p>';
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                currentPdfBytes = new Uint8Array(arrayBuffer);
+                
+                // Load for PDF.js (Preview rendering)
+                pdfDocInstance = await pdfjsLib.getDocument({ data: currentPdfBytes }).promise;
+                totalPages = pdfDocInstance.numPages;
+
+                // Default status memory reset (sabko starting me cross rakh rahe hain)
+                selectedPagesStatus = new Array(totalPages).fill(false); 
+                
+                currentPageIndex = 0;
+                paginationControls.classList.remove('hidden');
+                downloadBtn.disabled = false;
+
+                renderGrid();
+            } catch (error) {
+                console.error(error);
+                pagesContainer.innerHTML = '<p class="text-center col-span-full text-red-400">Error loading PDF file.</p>';
+            }
+        });
+
+        // Main Render Function for Pagination
+        async function renderGrid() {
+            pagesContainer.innerHTML = '';
+            
+            const start = currentPageIndex * itemsPerPage;
+            const end = Math.min(start + itemsPerPage, totalPages);
+
+            pageInfo.textContent = `Showing pages ${start + 1} - ${end} of ${totalPages}`;
+            prevBtn.disabled = currentPageIndex === 0;
+            nextBtn.disabled = end >= totalPages;
+
+            for (let i = start; i < end; i++) {
+                const pageNum = i + 1;
+                await createPageCard(pageNum);
+            }
+        }
+
+        // Render individual PDF page into canvas inside the card
+        async function createPageCard(pageNum) {
+            const card = document.createElement('div');
+            const isSahi = selectedPagesStatus[pageNum - 1];
+            
+            card.className = `bg-[#0f172a] border ${isSahi ? 'border-green-600' : 'border-red-600'} rounded-xl p-4 flex flex-col items-center shadow-md`;
+            card.id = `card-${pageNum}`;
+
+            // Create canvas for PDF.js preview
+            const canvas = document.createElement('canvas');
+            canvas.className = "w-full aspect-[3/4] bg-gray-900 rounded mb-4 border border-gray-700 object-contain";
+            
+            card.appendChild(canvas);
+
+            // Add Labels and Buttons
+            const label = document.createElement('div');
+            label.className = "text-center font-semibold mb-3 text-sm text-gray-300";
+            label.textContent = `Page ${pageNum}`;
+            card.appendChild(label);
+
+            const btnContainer = document.createElement('div');
+            btnContainer.className = "flex gap-2 w-full mt-auto";
+            
+            btnContainer.innerHTML = `
+                <button onclick="togglePage(${pageNum}, true)" id="sahi-${pageNum}" class="flex-1 ${isSahi ? 'bg-green-600' : 'bg-gray-700 hover:bg-green-700'} text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1">✔ Sahi</button>
+                <button onclick="togglePage(${pageNum}, false)" id="cross-${pageNum}" class="flex-1 ${!isSahi ? 'bg-red-600' : 'bg-gray-700 hover:bg-red-600'} text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1">✖ Cross</button>
+            `;
+            card.appendChild(btnContainer);
+            pagesContainer.appendChild(card);
+
+            // Trigger PDF.js to render page to this canvas
+            try {
+                const page = await pdfDocInstance.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 0.4 }); // low scale for fast thumbnail loading
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+            } catch (err) {
+                console.error("Error rendering page preview:", err);
+            }
+        }
+
+        // Toggle page selections
+        window.togglePage = function(pageNum, isSahi) {
+            selectedPagesStatus[pageNum - 1] = isSahi;
+            const card = document.getElementById(`card-${pageNum}`);
+            const sahiBtn = document.getElementById(`sahi-${pageNum}`);
+            const crossBtn = document.getElementById(`cross-${pageNum}`);
+
+            if (isSahi) {
+                card.classList.replace('border-red-600', 'border-green-600');
+                sahiBtn.className = "flex-1 bg-green-600 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
+                crossBtn.className = "flex-1 bg-gray-700 hover:bg-red-600 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
+            } else {
+                card.classList.replace('border-green-600', 'border-red-600');
+                sahiBtn.className = "flex-1 bg-gray-700 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
+                crossBtn.className = "flex-1 bg-red-600 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
+            }
+        };
+
+        // Pagination buttons action
+        prevBtn.addEventListener('click', () => {
+            if (currentPageIndex > 0) {
+                currentPageIndex--;
+                renderGrid();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if ((currentPageIndex + 1) * itemsPerPage < totalPages) {
+                currentPageIndex++;
+                renderGrid();
+            }
+        });
+
+        // Split & Download
+        downloadBtn.addEventListener('click', async () => {
+            const pagesToKeep = [];
+            selectedPagesStatus.forEach((status, idx) => {
+                if (status === true) pagesToKeep.push(idx);
+            });
+
+            if (pagesToKeep.length === 0) {
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            errorMessage.classList.add('hidden');
+
+            try {
+                const srcPdfDoc = await PDFLib.PDFDocument.load(currentPdfBytes);
+                const newPdfDoc = await PDFLib.PDFDocument.create();
+
+                const copiedPages = await newPdfDoc.copyPages(srcPdfDoc, pagesToKeep);
+                copiedPages.forEach((page) => newPdfDoc.addPage(page));
+
+                const newPdfBytes = await newPdfDoc.save();
+                const blob = new Blob([newPdfBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'split_document.pdf';
+                link.click();
+            } catch (error) {
+                console.error(error);
+                alert("PDF save karne me dikkat aayi.");
+            }
+        });
+    </script>
+</body>
+</html>

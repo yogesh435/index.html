@@ -15,12 +15,12 @@
     </div>
 
     <main class="w-full max-w-5xl mx-auto bg-[#1e293b] border border-gray-700 rounded-xl p-6 shadow-2xl flex-grow flex flex-col items-center">
-        <h1 class="text-3xl font-bold mb-2 text-center">Visual Split PDF</h1>
+        <h1 class="text-3xl font-bold mb-2 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Visual Split PDF</h1>
         <p class="text-gray-400 text-center mb-6 text-sm sm:text-base">
             PDF select karein, har page par sahi (✔) ya galat (✖) tick karein aur apna naya PDF generate karein.
         </p>
 
-        <label class="cursor-pointer bg-[#1d4ed8] hover:bg-blue-700 transition px-6 py-3 rounded-lg font-medium flex items-center gap-2 mb-6 shadow-md">
+        <label class="cursor-pointer bg-[#1d4ed8] hover:bg-blue-700 transition px-6 py-3 rounded-lg font-medium flex items-center gap-2 mb-6 shadow-md select-none">
             📄 Select PDF File
             <input type="file" id="pdf-input" accept="application/pdf" class="hidden">
         </label>
@@ -31,11 +31,10 @@
             <button id="next-btn" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-bold transition disabled:opacity-50">Next →</button>
         </div>
 
-        <div id="pages-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full mb-8">
-            </div>
+        <div id="pages-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 w-full mb-8"></div>
 
         <div class="text-center w-full mt-auto">
-            <button id="download-btn" disabled class="bg-[#9a3412] hover:bg-orange-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-8 py-3 rounded-lg text-lg transition shadow-lgwb">
+            <button id="download-btn" disabled class="bg-[#9a3412] hover:bg-orange-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-8 py-3 rounded-lg text-lg transition shadow-lg">
                 Split & Download →
             </button>
             <p id="error-message" class="text-red-400 mt-4 font-medium hidden">
@@ -64,10 +63,10 @@
 
         let selectedPagesStatus = []; 
         let currentPdfBytes = null;
-        let pdfDocInstance = null; // PDF.js instance
+        let pdfDocInstance = null;
         
-        let currentPageIndex = 0; // Current view page index for pagination
-        const itemsPerPage = 9;   // Ek baar me sirf 9 pages dikhenge screen par
+        let currentPageIndex = 0; 
+        const itemsPerPage = 9;   
         let totalPages = 0;
 
         pdfInput.addEventListener('change', async (e) => {
@@ -81,11 +80,11 @@
                 const arrayBuffer = await file.arrayBuffer();
                 currentPdfBytes = new Uint8Array(arrayBuffer);
                 
-                // Load for PDF.js (Preview rendering)
-                pdfDocInstance = await pdfjsLib.getDocument({ data: currentPdfBytes }).promise;
+                // FIX: .slice(0) ka use kiya taaki original data detach na ho
+                pdfDocInstance = await pdfjsLib.getDocument({ data: currentPdfBytes.slice(0) }).promise;
                 totalPages = pdfDocInstance.numPages;
 
-                // Default status memory reset (sabko starting me cross rakh rahe hain)
+                // Default: starting me sabko false (Cross) rakh rahe hain
                 selectedPagesStatus = new Array(totalPages).fill(false); 
                 
                 currentPageIndex = 0;
@@ -99,7 +98,6 @@
             }
         });
 
-        // Main Render Function for Pagination
         async function renderGrid() {
             pagesContainer.innerHTML = '';
             
@@ -116,21 +114,17 @@
             }
         }
 
-        // Render individual PDF page into canvas inside the card
         async function createPageCard(pageNum) {
             const card = document.createElement('div');
             const isSahi = selectedPagesStatus[pageNum - 1];
             
-            card.className = `bg-[#0f172a] border ${isSahi ? 'border-green-600' : 'border-red-600'} rounded-xl p-4 flex flex-col items-center shadow-md`;
+            card.className = `bg-[#0f172a] border ${isSahi ? 'border-green-600 shadow-green-900/30' : 'border-red-600 shadow-red-900/30'} rounded-xl p-4 flex flex-col items-center shadow-lg transition-all duration-300`;
             card.id = `card-${pageNum}`;
 
-            // Create canvas for PDF.js preview
             const canvas = document.createElement('canvas');
             canvas.className = "w-full aspect-[3/4] bg-gray-900 rounded mb-4 border border-gray-700 object-contain";
-            
             card.appendChild(canvas);
 
-            // Add Labels and Buttons
             const label = document.createElement('div');
             label.className = "text-center font-semibold mb-3 text-sm text-gray-300";
             label.textContent = `Page ${pageNum}`;
@@ -146,10 +140,9 @@
             card.appendChild(btnContainer);
             pagesContainer.appendChild(card);
 
-            // Trigger PDF.js to render page to this canvas
             try {
                 const page = await pdfDocInstance.getPage(pageNum);
-                const viewport = page.getViewport({ scale: 0.4 }); // low scale for fast thumbnail loading
+                const viewport = page.getViewport({ scale: 0.4 }); 
                 const context = canvas.getContext('2d');
                 canvas.height = viewport.height;
                 canvas.width = viewport.width;
@@ -160,7 +153,6 @@
             }
         }
 
-        // Toggle page selections
         window.togglePage = function(pageNum, isSahi) {
             selectedPagesStatus[pageNum - 1] = isSahi;
             const card = document.getElementById(`card-${pageNum}`);
@@ -168,17 +160,16 @@
             const crossBtn = document.getElementById(`cross-${pageNum}`);
 
             if (isSahi) {
-                card.classList.replace('border-red-600', 'border-green-600');
+                card.className = "bg-[#0f172a] border border-green-600 shadow-lg shadow-green-900/30 rounded-xl p-4 flex flex-col items-center transition-all duration-300";
                 sahiBtn.className = "flex-1 bg-green-600 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
                 crossBtn.className = "flex-1 bg-gray-700 hover:bg-red-600 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
             } else {
-                card.classList.replace('border-green-600', 'border-red-600');
+                card.className = "bg-[#0f172a] border border-red-600 shadow-lg shadow-red-900/30 rounded-xl p-4 flex flex-col items-center transition-all duration-300";
                 sahiBtn.className = "flex-1 bg-gray-700 hover:bg-green-700 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
                 crossBtn.className = "flex-1 bg-red-600 text-white font-bold py-2 px-3 rounded text-sm transition flex justify-center items-center gap-1";
             }
         };
 
-        // Pagination buttons action
         prevBtn.addEventListener('click', () => {
             if (currentPageIndex > 0) {
                 currentPageIndex--;
@@ -193,7 +184,7 @@
             }
         });
 
-        // Split & Download
+        // Split & Download Action
         downloadBtn.addEventListener('click', async () => {
             const pagesToKeep = [];
             selectedPagesStatus.forEach((status, idx) => {
@@ -208,6 +199,7 @@
             errorMessage.classList.add('hidden');
 
             try {
+                // PDFLib load smoothly work karega kyunki data safe hai
                 const srcPdfDoc = await PDFLib.PDFDocument.load(currentPdfBytes);
                 const newPdfDoc = await PDFLib.PDFDocument.create();
 
@@ -222,7 +214,7 @@
                 link.click();
             } catch (error) {
                 console.error(error);
-                alert("PDF save karne me dikkat aayi.");
+                alert("PDF save karne me dikkat aayi: " + error.message);
             }
         });
     </script>

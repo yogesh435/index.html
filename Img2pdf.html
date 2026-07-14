@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Master - Image to PDF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { background-color: #0b132b; color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+        .card { background-color: #111a36; border: 1px solid #1c2a54; }
+        .btn-primary { background: linear-gradient(90deg, #ff7e67, #ff9874); color: #0b132b; transition: transform 0.2s; }
+        .btn-primary:hover { transform: scale(1.02); }
+        .ad-banner { background-color: #111a36; border: 1px dashed #1c2a54; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-4">
+
+    <div class="ad-banner w-full max-w-4xl h-24 flex items-center justify-center text-gray-500 text-xs tracking-widest rounded-xl mb-6">
+        ADVERTISEMENT
+    </div>
+
+    <div class="flex flex-col items-center justify-center flex-grow w-full">
+        <div class="text-center mb-8">
+            <span class="bg-[#00ff87] text-[#0b132b] text-xs font-bold px-3 py-1 rounded-full inline-block mb-3">
+                ⚡ 100% Local Engine (Safe & Fast)
+            </span>
+            <h1 class="text-3xl font-bold text-yellow-500 mb-2">Image to PDF Converter</h1>
+            <p class="text-gray-400 text-sm">Apni JPG, PNG images ko bina quality loss ke exact PDF me convert karein.</p>
+        </div>
+
+        <div class="card w-full max-w-lg rounded-2xl p-6 shadow-2xl">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="w-12 h-12 bg-[#e67e22] rounded-full flex items-center justify-center text-xl font-bold text-white">📷</div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">Instant Image Layout Mapping</h2>
+                    <p class="text-gray-400 text-xs">Supports Multiple Photos, Marksheets and Document Scans.</p>
+                </div>
+            </div>
+
+            <div class="border-2 border-dashed border-[#1c2a54] hover:border-yellow-500 rounded-xl p-8 text-center cursor-pointer mb-6" id="dropZone">
+                <input type="file" id="imageInput" accept="image/jpeg, image/png" multiple class="hidden">
+                <label for="imageInput" class="cursor-pointer block">
+                    <span class="text-4xl block mb-2">🖼️</span>
+                    <span id="fileName" class="text-gray-300 font-medium block">Images Select Karein</span>
+                    <span class="text-gray-500 text-xs mt-1 block">Multiple files select karne ke liye hold karein</span>
+                </label>
+            </div>
+
+            <div id="previewContainer" class="grid grid-cols-4 gap-2 mb-4 max-h-32 overflow-y-auto hidden"></div>
+
+            <button id="convertBtn" class="btn-primary w-full py-3 px-4 rounded-xl font-bold opacity-60 cursor-not-allowed" disabled>
+                Generate PDF ➔
+            </button>
+
+            <p id="statusMsg" class="text-center text-sm mt-4 hidden"></p>
+        </div>
+    </div>
+
+    <div class="ad-banner w-full max-w-4xl h-24 flex items-center justify-center text-gray-500 text-xs tracking-widest rounded-xl mt-6">
+        ADVERTISEMENT
+    </div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const dropZone = document.getElementById('dropZone');
+        const fileNameText = document.getElementById('fileName');
+        const convertBtn = document.getElementById('convertBtn');
+        const statusMsg = document.getElementById('statusMsg');
+        const previewContainer = document.getElementById('previewContainer');
+
+        let selectedFiles = [];
+
+        // File Selection Listener
+        imageInput.addEventListener('change', handleFiles);
+
+        function handleFiles(e) {
+            const files = Array.from(e.target.files || e.dataTransfer.files);
+            const validImages = files.filter(file => file.type === "image/jpeg" || file.type === "image/png");
+
+            if (validImages.length > 0) {
+                selectedFiles = validImages;
+                fileNameText.textContent = `${selectedFiles.length} Images Selected`;
+                convertBtn.removeAttribute('disabled');
+                convertBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+                
+                // Show grid previews
+                previewContainer.innerHTML = '';
+                previewContainer.classList.remove('hidden');
+                selectedFiles.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = document.createElement('img');
+                        img.src = event.target.result;
+                        img.className = "w-full h-12 object-cover rounded border border-[#1c2a54]";
+                        previewContainer.appendChild(img);
+                    }
+                    reader.readAsDataURL(file);
+                });
+            }
+        }
+
+        // PDF Generation Trigger
+        convertBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            statusMsg.classList.remove('hidden', 'text-red-400', 'text-green-400');
+            statusMsg.classList.add('text-yellow-400');
+            statusMsg.textContent = "PDF Engine compile ho raha hai... Please wait.";
+            convertBtn.disabled = true;
+
+            try {
+                const { jsPDF } = window.jspdf;
+                // 'p' (portrait), 'pt' (points), 'a4' default layout envelope
+                const pdf = new jsPDF('p', 'pt', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    statusMsg.textContent = `Packing Image ${i + 1} of ${selectedFiles.length}...`;
+                    
+                    if (i > 0) {
+                        pdf.addPage();
+                    }
+
+                    const base64Data = await fileToDataURL(selectedFiles[i]);
+                    const imgProps = pdf.getImageProperties(base64Data);
+                    
+                    // Exact Aspect Ratio Calculation to prevent image stretching
+                    const ratio = imgProps.width / imgProps.height;
+                    let width = pdfWidth;
+                    let height = pdfWidth / ratio;
+
+                    if (height > pdfHeight) {
+                        height = pdfHeight;
+                        width = pdfHeight * ratio;
+                    }
+
+                    // Centering calculation on A4 canvas
+                    const marginX = (pdfWidth - width) / 2;
+                    const marginY = (pdfHeight - height) / 2;
+
+                    const format = selectedFiles[i].type === "image/png" ? "PNG" : "JPEG";
+                    pdf.addImage(base64Data, format, marginX, marginY, width, height);
+                }
+
+                pdf.save("Images_Export.pdf");
+
+                statusMsg.classList.remove('text-yellow-400');
+                statusMsg.classList.add('text-green-400');
+                statusMsg.textContent = "Success! Aapki images PDF me convert ho gayi hain.";
+                convertBtn.disabled = false;
+
+            } catch (error) {
+                console.error(error);
+                statusMsg.classList.remove('text-yellow-400');
+                statusMsg.classList.add('text-red-400');
+                statusMsg.textContent = "Error: PDF processing fails.";
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Helper function for FileReader conversion
+        function fileToDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Drag & Drop Handling
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            handleFiles(e);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Master - Delete PDF Pages with Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        body { background-color: #0b132b; color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+        .card { background-color: #111a36; border: 1px solid #1c2a54; }
+        .btn-primary { background: linear-gradient(90deg, #ff7e67, #ff9874); color: #0b132b; transition: transform 0.2s; }
+        .btn-primary:hover { transform: scale(1.02); }
+        .ad-banner { background-color: #111a36; border: 1px dashed #1c2a54; }
+        .page-box { position: relative; cursor: pointer; transition: all 0.2s; border: 2px solid #1c2a54; }
+        .page-box.selected { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); }
+        .delete-badge { position: absolute; top: 4px; right: 4px; background-color: #ef4444; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; items-center; justify-content: center; font-size: 12px; font-weight: bold; display: none; }
+        .page-box.selected .delete-badge { display: flex; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-4">
+
+    <div class="ad-banner w-full max-w-4xl h-24 flex items-center justify-center text-gray-500 text-xs tracking-widest rounded-xl mb-6">
+        ADVERTISEMENT
+    </div>
+
+    <div class="flex flex-col items-center justify-center flex-grow w-full max-w-4xl">
+        <div class="text-center mb-6">
+            <span class="bg-[#00ff87] text-[#0b132b] text-xs font-bold px-3 py-1 rounded-full inline-block mb-3">
+                ⚡ 100% Visual Local Engine (Safe & Fast)
+            </span>
+            <h1 class="text-3xl font-bold text-blue-500 mb-2">Visual Delete PDF Pages</h1>
+            <p class="text-gray-400 text-sm">Pages par click karke unhe delete ke liye select karein. Ek baar me 10 pages dikhenge.</p>
+        </div>
+
+        <div class="card w-full rounded-2xl p-6 shadow-2xl mb-4">
+            <div class="border-2 border-dashed border-[#1c2a54] hover:border-blue-500 rounded-xl p-6 text-center cursor-pointer mb-4" id="dropZone">
+                <input type="file" id="pdfInput" accept="application/pdf" class="hidden">
+                <label for="pdfInput" class="cursor-pointer block">
+                    <span class="text-3xl block mb-1">📄</span>
+                    <span id="fileName" class="text-gray-300 font-medium block">PDF File Select Karein</span>
+                    <span id="pageCountInfo" class="text-gray-500 text-xs mt-1 block">Preview dekh kar select karein</span>
+                </label>
+            </div>
+
+            <div id="previewWrapper" class="hidden">
+                <h3 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Select Pages to Remove:</h3>
+                
+                <div id="pagesGrid" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4"></div>
+
+                <div class="flex items-center justify-between border-t border-[#1c2a54] pt-4 mb-4">
+                    <button id="prevPageBtn" class="bg-[#0b132b] border border-[#1c2a54] text-gray-300 px-4 py-2 rounded-xl text-xs disabled:opacity-40" disabled>⇦ Previous 10</button>
+                    <span id="paginationInfo" class="text-xs text-gray-400">Page 0 of 0</span>
+                    <button id="nextPageBtn" class="bg-[#0b132b] border border-[#1c2a54] text-gray-300 px-4 py-2 rounded-xl text-xs disabled:opacity-40" disabled>Next 10 ⇨</button>
+                </div>
+            </div>
+
+            <button id="convertBtn" class="btn-primary w-full py-3 px-4 rounded-xl font-bold opacity-60 cursor-not-allowed" disabled>
+                Remove Selected Pages & Download ➔
+            </button>
+
+            <p id="statusMsg" class="text-center text-sm mt-4 hidden"></p>
+        </div>
+    </div>
+
+    <div class="ad-banner w-full max-w-4xl h-24 flex items-center justify-center text-gray-500 text-xs tracking-widest rounded-xl mt-6">
+        ADVERTISEMENT
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        const pdfInput = document.getElementById('pdfInput');
+        const dropZone = document.getElementById('dropZone');
+        const fileNameText = document.getElementById('fileName');
+        const pageCountInfo = document.getElementById('pageCountInfo');
+        const convertBtn = document.getElementById('convertBtn');
+        const statusMsg = document.getElementById('statusMsg');
+        
+        const previewWrapper = document.getElementById('previewWrapper');
+        const pagesGrid = document.getElementById('pagesGrid');
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const paginationInfo = document.getElementById('paginationInfo');
+
+        let selectedFile = null;
+        let pdfDocInstance = null; // pdf.js document instance
+        let totalPages = 0;
+        
+        let currentPageGroup = 1; // 1 means pages 1-10, 2 means 11-20, etc.
+        const itemsPerPage = 10;
+        
+        // Global Set to keep track of deleted 0-indexed page numbers across all pagination screens
+        let pagesToDelete = new Set(); 
+
+        pdfInput.addEventListener('change', handleFileSelection);
+
+        async function handleFileSelection(e) {
+            const file = (e.target.files || e.dataTransfer.files)[0];
+            if (file && file.type === "application/pdf") {
+                selectedFile = file;
+                fileNameText.textContent = file.name;
+                
+                statusMsg.classList.remove('hidden', 'text-red-400', 'text-green-400');
+                statusMsg.classList.add('text-yellow-400');
+                statusMsg.textContent = "PDF analyze aur previews render ho rahe hain...";
+                
+                pagesToDelete.clear();
+                currentPageGroup = 1;
+
+                try {
+                    const fileBuffer = await selectedFile.arrayBuffer();
+                    
+                    // Load for rendering inside browser via pdf.js
+                    const loadingTask = pdfjsLib.getDocument({ data: fileBuffer.slice(0) });
+                    pdfDocInstance = await loadingTask.promise;
+                    totalPages = pdfDocInstance.numPages;
+
+                    pageCountInfo.textContent = `Total ${totalPages} Pages detected.`;
+                    pageCountInfo.className = "text-green-400 font-semibold text-xs mt-1 block";
+
+                    previewWrapper.classList.remove('hidden');
+                    convertBtn.removeAttribute('disabled');
+                    convertBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+                    statusMsg.classList.add('hidden');
+
+                    renderPageGroup();
+
+                } catch (error) {
+                    console.error(error);
+                    statusMsg.className = "text-center text-sm mt-4 text-red-400";
+                    statusMsg.textContent = "Error: Previews load karne me dikkat aayi.";
+                }
+            }
+        }
+
+        // Render exactly 10 pages based on pagination index parameters
+        async function renderPageGroup() {
+            pagesGrid.innerHTML = '';
+            
+            const startPage = (currentPageGroup - 1) * itemsPerPage + 1;
+            const endPage = Math.min(startPage + itemsPerPage - 1, totalPages);
+            
+            paginationInfo.textContent = `Showing ${startPage}-${endPage} of ${totalPages} pages`;
+            
+            // Pagination buttons trigger state control
+            prevPageBtn.disabled = currentPageGroup === 1;
+            nextPageBtn.disabled = endPage >= totalPages;
+
+            for (let i = startPage; i <= endPage; i++) {
+                const pageIndex = i - 1; // 0-based indexing for calculations
+
+                // Outer Card Box Container Element
+                const box = document.createElement('div');
+                box.className = `page-box rounded-xl p-2 bg-[#0b132b] text-center ${pagesToDelete.has(pageIndex) ? 'selected' : ''}`;
+                
+                // Red badge marker attachment
+                const badge = document.createElement('div');
+                badge.className = 'delete-badge';
+                badge.innerHTML = '✕';
+                box.appendChild(badge);
+
+                // Canvas Initialization for actual vector render
+                const canvas = document.createElement('canvas');
+                canvas.className = "w-full h-auto rounded border border-[#1c2a54] mb-2";
+                box.appendChild(canvas);
+
+                // Page dynamic label index text indicator
+                const label = document.createElement('span');
+                label.className = "text-xs font-semibold text-gray-400";
+                label.textContent = `Page ${i}`;
+                box.appendChild(label);
+
+                pagesGrid.appendChild(box);
+
+                // Render page viewport preview asynchronously to prevent freezing
+                renderPageCanvas(i, canvas);
+
+                // Add Toggle Select Event Listener
+                box.addEventListener('click', () => {
+                    if (pagesToDelete.has(pageIndex)) {
+                        pagesToDelete.delete(pageIndex);
+                        box.classList.remove('selected');
+                    } else {
+                        pagesToDelete.add(pageIndex);
+                        box.classList.add('selected');
+                    }
+                    
+                    // Update main dynamic output progress string message
+                    if (pagesToDelete.size > 0) {
+                        statusMsg.className = "text-center text-sm mt-4 text-red-400 font-medium";
+                        statusMsg.textContent = `${pagesToDelete.size} Pages select ho chuke hain delete karne ke liye.`;
+                        statusMsg.classList.remove('hidden');
+                    } else {
+                        statusMsg.classList.add('hidden');
+                    }
+                });
+            }
+        }
+
+        // Dedicated pipeline render wrapper routine logic for pdfjs frames loading
+        async function renderPageCanvas(pageNum, canvas) {
+            try {
+                const page = await pdfDocInstance.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 0.4 }); // low scale ensures lightning fast layout thumbnail build
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+            } catch (err) {
+                console.error("Thumbnail failure indices: ", err);
+            }
+        }
+
+        // Pagination Navigation Click Triggers
+        prevPageBtn.addEventListener('click', () => {
+            if (currentPageGroup > 1) {
+                currentPageGroup--;
+                renderPageGroup();
+            }
+        });
+
+        nextPageBtn.addEventListener('click', () => {
+            const maxGroup = Math.ceil(totalPages / itemsPerPage);
+            if (currentPageGroup < maxGroup) {
+                currentPageGroup++;
+                renderPageGroup();
+            }
+        });
+
+        // Execute file stripping modification via pdf-lib structures
+        convertBtn.addEventListener('click', async () => {
+            if (!selectedFile || pagesToDelete.size === 0) {
+                statusMsg.className = "text-center text-sm mt-4 text-red-400";
+                statusMsg.textContent = "Error: Kripya pehle kisi page par click karke use select karein.";
+                statusMsg.classList.remove('hidden');
+                return;
+            }
+
+            if (pagesToDelete.size >= totalPages) {
+                statusMsg.className = "text-center text-sm mt-4 text-red-400";
+                statusMsg.textContent = "Error: Aap poori PDF file delete nahi kar sakte, kam se kam 1 page rehna chahiye.";
+                return;
+            }
+
+            statusMsg.className = "text-center text-sm mt-4 text-yellow-400";
+            statusMsg.textContent = "Selected pages remove kiye ja rahe hain...";
+            convertBtn.disabled = true;
+
+            try {
+                const fileBuffer = await selectedFile.arrayBuffer();
+                const pdfDoc = await PDFLib.PDFDocument.load(fileBuffer);
+
+                // Sort deletion indices in descending orders strictly
+                const sortedIndices = Array.from(pagesToDelete).sort((a, b) => b - a);
+
+                sortedIndices.forEach(index => {
+                    pdfDoc.removePage(index);
+                });
+
+                const modifiedPdfBytes = await pdfDoc.save();
+                const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = selectedFile.name.replace(/\.[^/.]+$/, "") + "_edited.pdf";
+                document.body.appendChild(link);
+                link.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    window.location.reload(); // Reload resets visual states perfectly
+                }, 100);
+
+            } catch (error) {
+                console.error(error);
+                statusMsg.className = "text-center text-sm mt-4 text-red-400";
+                statusMsg.textContent = "Error: Modification processing fails.";
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Drag & Drop Processing Setup 
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            handleFileSelection(e);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Master - PDF to Images</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body { background-color: #0b132b; color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+        .card { background-color: #111a36; border: 1px solid #1c2a54; }
+        .btn-primary { background: linear-gradient(90deg, #ff7e67, #ff9874); color: #0b132b; transition: transform 0.2s; }
+        .btn-primary:hover { transform: scale(1.02); }
+        .ad-banner { background-color: #111a36; border: 1px dashed #1c2a54; }
+        .preview-img { border: 1px solid #1c2a54; transition: transform 0.2s; }
+        .preview-img:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen p-4">
+
+    <div class="ad-banner w-full max-w-4xl h-24 flex items-center justify-center text-gray-500 text-xs tracking-widest rounded-xl mb-6">
+        ADVERTISEMENT
+    </div>
+
+    <div class="flex flex-col items-center justify-center flex-grow w-full">
+        <div class="text-center mb-8">
+            <span class="bg-[#00ff87] text-[#0b132b] text-xs font-bold px-3 py-1 rounded-full inline-block mb-3">
+                ⚡ 100% Local Engine (Safe & Fast)
+            </span>
+            <h1 class="text-3xl font-bold text-green-400 mb-2">PDF to Images Converter</h1>
+            <p class="text-gray-400 text-sm">Apni PDF file ke har ek page ko high-quality JPG images me extract karein.</p>
+        </div>
+
+        <div class="card w-full max-w-lg rounded-2xl p-6 shadow-2xl">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-xl font-bold text-white">🖼️</div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">High Definition PDF Extraction</h2>
+                    <p class="text-gray-400 text-xs">Har page separate image ban kar ZIP file me auto-pack ho jayega.</p>
+                </div>
+            </div>
+
+            <div class="border-2 border-dashed border-[#1c2a54] hover:border-green-500 rounded-xl p-8 text-center cursor-pointer mb-6" id="dropZone">
+                <input type="file" id="pdfInput" accept="application/pdf" class="hidden">
+                <label for="pdfInput" class="cursor-pointer block">
+                    <span class="text-4xl block mb-2">📄</span>
+                    <span id="fileName" class="text-gray-300 font-medium block">PDF File Select Karein</span>
+                    <span id="pageCountInfo" class="text-gray-500 text-xs mt-1 block">Compatible with all standard PDF versions</span>
+                </label>
+            </div>
+
+            <div id="previewSection" class="hidden mb-6">
+                <label class="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Extracted Pages Preview:</label>
+                <div id="previewGrid" class="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1 bg-[#0b132b] rounded-xl border border-[#1c2a54]">
+                    </div>
+            </div>
+
+            <button id="convertBtn" class="btn-primary w-full py-3 px-4 rounded-xl font-bold opacity-60 cursor-not-allowed" disabled>
+                Convert to Images & Download ZIP ➔
+            </button>
+
+            <p id="statusMsg" class="text-center text-sm mt-4 hidden"></p>
+        </div>
+    </div>
+
+    <div class="ad-banner w-full max-w-4xl h-24 flex items-center justify-center text-gray-500 text-xs tracking-widest rounded-xl mt-6">
+        ADVERTISEMENT
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        const pdfInput = document.getElementById('pdfInput');
+        const dropZone = document.getElementById('dropZone');
+        const fileNameText = document.getElementById('fileName');
+        const pageCountInfo = document.getElementById('pageCountInfo');
+        const convertBtn = document.getElementById('convertBtn');
+        const statusMsg = document.getElementById('statusMsg');
+        const previewSection = document.getElementById('previewSection');
+        const previewGrid = document.getElementById('previewGrid');
+
+        let selectedFile = null;
+        let pdfInstance = null;
+
+        // File Selection Event Listener
+        pdfInput.addEventListener('change', handleFileSelection);
+
+        async function handleFileSelection(e) {
+            const file = (e.target.files || e.dataTransfer.files)[0];
+            if (file && file.type === "application/pdf") {
+                selectedFile = file;
+                fileNameText.textContent = file.name;
+                
+                statusMsg.classList.remove('hidden', 'text-red-400', 'text-green-400');
+                statusMsg.classList.add('text-yellow-400');
+                statusMsg.textContent = "PDF analyze ho rahi hai...";
+
+                previewGrid.innerHTML = '';
+                previewSection.classList.add('hidden');
+
+                try {
+                    const fileArrayBuffer = await selectedFile.arrayBuffer();
+                    // Load the PDF via pdf.js pipeline
+                    pdfInstance = await pdfjsLib.getDocument({ data: fileArrayBuffer }).promise;
+                    const totalPages = pdfInstance.numPages;
+
+                    pageCountInfo.textContent = `Is PDF me Total ${totalPages} Pages hain.`;
+                    pageCountInfo.className = "text-green-400 font-semibold text-xs mt-1 block";
+
+                    convertBtn.removeAttribute('disabled');
+                    convertBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+                    statusMsg.classList.add('hidden');
+
+                } catch (error) {
+                    console.error(error);
+                    statusMsg.className = "text-center text-sm mt-4 text-red-400";
+                    statusMsg.textContent = "Error: PDF load karne me dikkat aayi.";
+                }
+            }
+        }
+
+        // Render Pages & Generate ZIP
+        convertBtn.addEventListener('click', async () => {
+            if (!selectedFile || !pdfInstance) return;
+
+            statusMsg.classList.remove('hidden', 'text-red-400', 'text-green-400');
+            statusMsg.classList.add('text-yellow-400');
+            convertBtn.disabled = true;
+
+            const zip = new JSZip();
+            const totalPages = pdfInstance.numPages;
+            previewSection.classList.remove('hidden');
+            previewGrid.innerHTML = '';
+
+            try {
+                // Loop through all pages to render them on canvas and push to zip
+                for (let i = 1; i <= totalPages; i++) {
+                    statusMsg.textContent = `Rendering Page ${i} of ${totalPages}...`;
+                    
+                    const page = await pdfInstance.getPage(i);
+                    // Scale 2.0 provides ultra-clear sharpness for reading text grids or structures
+                    const viewport = page.getViewport({ scale: 2.0 }); 
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    // Render into memory canvas context
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    // Generate pure base64 jpeg data segment
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+                    const base64Data = dataUrl.split(',')[1];
+
+                    // Append to ZIP structure matrix
+                    zip.file(`page_${i}.jpg`, base64Data, { base64: true });
+
+                    // Append to live visual layout thumbnail row for UI feedback
+                    const thumbCanvas = document.createElement('canvas');
+                    thumbCanvas.className = "w-full h-16 object-cover rounded border border-[#1c2a54] preview-img";
+                    const thumbContext = thumbCanvas.getContext('2d');
+                    const thumbViewport = page.getViewport({ scale: 0.2 }); // Light scale for preview rendering
+                    thumbCanvas.height = thumbViewport.height;
+                    thumbCanvas.width = thumbViewport.width;
+                    await page.render({ canvasContext: thumbContext, viewport: thumbViewport }).promise;
+                    previewGrid.appendChild(thumbCanvas);
+                }
+
+                statusMsg.textContent = "ZIP Archive build ho raha hai... Downloading started.";
+
+                // Generate downloadeable binary file buffer blob
+                const contentBlob = await zip.generateAsync({ type: "blob" });
+                const url = URL.createObjectURL(contentBlob);
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = selectedFile.name.replace(/\.[^/.]+$/, "") + "_images.zip";
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+
+                setTimeout(() => {
+                    document.body.removeChild(downloadLink);
+                    URL.revokeObjectURL(url);
+                }, 100);
+
+                statusMsg.classList.replace('text-yellow-400', 'text-green-400');
+                statusMsg.textContent = "Success! Saare pages high quality JPG files me convert hokar ZIP download ho chuke hain.";
+                convertBtn.disabled = false;
+
+            } catch (error) {
+                console.error(error);
+                statusMsg.classList.replace('text-yellow-400', 'text-red-400');
+                statusMsg.textContent = "Error: Image generation processing fails.";
+                convertBtn.disabled = false;
+            }
+        });
+
+        // Drag & Drop Event Management
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            handleFileSelection(e);
+        });
+    </script>
+</body>
+</html>
